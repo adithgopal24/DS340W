@@ -1,0 +1,218 @@
+# Front Matter
+
+```{r}
+# Load libraries
+library(tidyverse)
+library(tidymodels)
+library(xgboost)
+library(scales)
+
+# Load EAGLE data
+data_2016 <- readRDS("EAGLE_2016.rds")
+data_2017 <- readRDS("EAGLE_2017.rds")
+data_2018 <- readRDS("EAGLE_2018.rds")
+data_2019 <- readRDS("EAGLE_2019.rds")
+data_2020 <- readRDS("EAGLE_2020.rds")
+data_2021 <- readRDS("EAGLE_2021.rds")
+
+# Calculate EAGLE
+eagle_2016 <- data_2016 %>% filter(PA >= 200, !is.na(expRA_swing)) %>% group_by(batter, Name) %>% summarize(year = first(season.x), runs_lost = sum(runs_lost_bad_dec) / sum(abs_eRA_s), wRA = sum(ifelse(swing == 1, expRA_swing, -expRA_swing)), EAGLE = wRA / n(), avg = first(BA), obp = first(OBP), ops = first(OPS),  kperc = first(SO.x) / first(PA), bbperc = first(BB.x) / first(PA), perc_swing_out_zone = sum(ifelse(strike_prob < .3 & swing == 1, 1, 0)) / sum(ifelse(strike_prob < .3, 1, 0)))
+
+eagle_2017 <- data_2017 %>% filter(PA >= 200, !is.na(expRA_swing)) %>% group_by(batter, Name) %>% summarize(year = first(season.x), runs_lost = sum(runs_lost_bad_dec) / sum(abs_eRA_s), wRA = sum(ifelse(swing == 1, expRA_swing, -expRA_swing)), EAGLE = wRA / n(), avg = first(BA), obp = first(OBP), ops = first(OPS),  kperc = first(SO.x) / first(PA), bbperc = first(BB.x) / first(PA), perc_swing_out_zone = sum(ifelse(strike_prob < .3 & swing == 1, 1, 0)) / sum(ifelse(strike_prob < .3, 1, 0)))
+
+eagle_2018 <- data_2018 %>% filter(PA >= 200, !is.na(expRA_swing)) %>% group_by(batter, Name) %>% summarize(year = first(season.x), runs_lost = sum(runs_lost_bad_dec) / sum(abs_eRA_s), wRA = sum(ifelse(swing == 1, expRA_swing, -expRA_swing)), EAGLE = wRA / n(), avg = first(BA), obp = first(OBP), ops = first(OPS),  kperc = first(SO.x) / first(PA), bbperc = first(BB.x) / first(PA), perc_swing_out_zone = sum(ifelse(strike_prob < .3 & swing == 1, 1, 0)) / sum(ifelse(strike_prob < .3, 1, 0)))
+
+eagle_2019 <- data_2019 %>% filter(PA >= 200, !is.na(expRA_swing)) %>% group_by(batter, Name) %>% summarize(year = first(season.x), runs_lost = sum(runs_lost_bad_dec) / sum(abs_eRA_s), wRA = sum(ifelse(swing == 1, expRA_swing, -expRA_swing)), EAGLE = wRA / n(), avg = first(BA), obp = first(OBP), ops = first(OPS),  kperc = first(SO.x) / first(PA), bbperc = first(BB.x) / first(PA), perc_swing_out_zone = sum(ifelse(strike_prob < .3 & swing == 1, 1, 0)) / sum(ifelse(strike_prob < .3, 1, 0)))
+
+eagle_2020 <- data_2020 %>% filter(PA >= 200, !is.na(expRA_swing)) %>% group_by(batter, Name) %>% summarize(year = first(season.x), runs_lost = sum(runs_lost_bad_dec) / sum(abs_eRA_s), wRA = sum(ifelse(swing == 1, expRA_swing, -expRA_swing)), EAGLE = wRA / n(), avg = first(BA), obp = first(OBP), ops = first(OPS),  kperc = first(SO.x) / first(PA), bbperc = first(BB.x) / first(PA), perc_swing_out_zone = sum(ifelse(strike_prob < .3 & swing == 1, 1, 0)) / sum(ifelse(strike_prob < .3, 1, 0)))
+
+eagle_2021 <- data_2021 %>% filter(PA >= 200, !is.na(expRA_swing)) %>% group_by(batter, Name) %>% summarize(year = first(season.x), runs_lost = sum(runs_lost_bad_dec) / sum(abs_eRA_s), wRA = sum(ifelse(swing == 1, expRA_swing, -expRA_swing)), EAGLE = wRA / n(), avg = first(BA), obp = first(OBP), ops = first(OPS),  kperc = first(SO.x) / first(PA), bbperc = first(BB.x) / first(PA), perc_swing_out_zone = sum(ifelse(strike_prob < .3 & swing == 1, 1, 0)) / sum(ifelse(strike_prob < .3, 1, 0)))
+
+# Load FanGraphs data
+fg_data <- read.csv("fangraphs-leaderboards.csv")
+fg_data <- fg_data %>%
+  mutate(Season = as.character(Season),
+         Z_O_Swing_Rate = Z_Swing_Rate - O_Swing_Rate)
+
+fg_2016 <- fg_data %>% filter(Season == 2016)
+fg_2017 <- fg_data %>% filter(Season == 2017)
+fg_2018 <- fg_data %>% filter(Season == 2018)
+fg_2019 <- fg_data %>% filter(Season == 2019)
+fg_2020 <- fg_data %>% filter(Season == 2020)
+fg_2021 <- fg_data %>% filter(Season == 2021)
+
+all_2016 <- eagle_2016 %>% left_join(fg_2016, by = c("batter" = "MLBAMID", "year" = "Season")) %>% drop_na()
+all_2017 <- eagle_2017 %>% left_join(fg_2017, by = c("batter" = "MLBAMID", "year" = "Season")) %>% drop_na()
+all_2018 <- eagle_2018 %>% left_join(fg_2018, by = c("batter" = "MLBAMID", "year" = "Season")) %>% drop_na()
+all_2019 <- eagle_2019 %>% left_join(fg_2019, by = c("batter" = "MLBAMID", "year" = "Season")) %>% drop_na()
+all_2020 <- eagle_2020 %>% left_join(fg_2020, by = c("batter" = "MLBAMID", "year" = "Season")) %>% drop_na()
+all_2021 <- eagle_2021 %>% left_join(fg_2021, by = c("batter" = "MLBAMID", "year" = "Season")) %>% drop_na()
+```
+
+# Data Wrangling & Feature Engineering
+
+```{r}
+
+```
+
+# Train Models to Create SDG (Our Own Plate Discipline Metric)
+
+```{r}
+# Create model specification
+spec <- boost_tree(trees = tune(), min_n = tune(), tree_depth = tune(), learn_rate = tune(), sample_size = tune(), mtry = tune()) %>%
+  set_mode("regression") %>%
+  set_engine("xgboost")
+    
+num_predictors <- ncol(select(train, -player_id, -name, -season_future, -fip_minus_future))
+  mtry_param <- mtry(range = c(1, num_predictors))
+  params <- parameters(spec) %>% update(mtry = mtry_param)
+  
+# Create model recipe
+rec <- recipe(RunValue ~ ., data = train) %>%
+  update_role(GameID, PitchNo, new_role = "ID")
+  
+# Combine specification and recipe into a workflow
+wf <- workflow() %>%
+  add_model(spec) %>%
+  add_recipe(rec)
+```
+
+```{r}
+# Tune hyperparameters via Bayesian optimization using validation set
+tune_res <- wf %>%
+  tune_bayes(resamples = val_set,
+             initial = 10,
+             iter = 100,
+             param_info = params,
+             control = control_bayes(verbose = TRUE, no_improve = 10, seed = 3),
+             metrics = metric_set(rmse))
+  
+# Collect validation errors
+val_error <- tune_res %>%
+  collect_metrics() %>%
+  filter(.metric == "rmse")
+  
+# Save validation performances, including best one
+write.csv(val_error, "validation_errors.csv", row.names = FALSE)
+  
+# Extract best-performing hyperparameters
+best_params <- select_best(tune_res, "rmse")
+  
+# Combine training and validation to train final model
+train <- rbind(train, val)
+  
+# Train best candidate model
+set.seed(3)
+final_model <- wf %>%
+  finalize_workflow(best_params) %>%
+  fit(data = train)
+  
+# Save best model
+saveRDS(final_model, "final_model.rds")
+  
+# Generate variable importance plot
+vip_plot <- final_model %>% 
+  extract_fit_parsnip() %>% 
+  vip() +
+  ggtitle("Feature Importance")
+    
+# Save VIP plot
+ggsave(filename = "final_model_vip.png", plot = vip_plot, width = 10, height = 8, dpi = 300)
+```
+
+# Descriptiveness
+
+```{r}
+all_2016_2021 <- rbind(all_2016, all_2017, all_2018, all_2019, all_2020, all_2021)
+```
+
+```{r}
+correlation <- cor(all_2016_2021$EAGLE, all_2016_2021$wRC_Plus, use = "complete.obs")
+
+ggplot(all_2016_2021, aes(x = EAGLE, y = wRC_Plus)) +
+  geom_point(color = "royalblue3", alpha = 0.5) +
+  geom_smooth(method = "lm", color = "red", se = FALSE) +
+  scale_x_continuous(breaks = pretty_breaks(n = 10)) +
+  scale_y_continuous(breaks = pretty_breaks(n = 10)) +
+  theme_minimal() +
+  theme(plot.title = element_text(face = "bold"),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank()) +
+  annotate("text", x = max(all_2016_2021$EAGLE, na.rm = TRUE),
+           y = min(all_2016_2021$wRC_Plus, na.rm = TRUE), 
+           label = paste("Correlation =", round(correlation, 2)), hjust = 1, vjust = 0) +
+  labs(title = "Relationship Between EAGLE and wRC+",
+       x = "EAGLE", y = "wRC+")
+```
+
+# Predictiveness
+
+```{r}
+# Restructure data
+predict_17 <- all_2017 %>%
+  rename_with(~paste0(., "_future"), -(1:2)) %>% select(-contains("_future"), year_future, EAGLE_future, wRC_Plus_future) %>%
+  left_join(all_2016 %>% rename_with(~paste0(., "_past"), -(1:2)), by = c("batter", "Name"))
+
+predict_18 <- all_2018 %>%
+  rename_with(~paste0(., "_future"), -(1:2)) %>% select(-contains("_future"), year_future, EAGLE_future, wRC_Plus_future) %>%
+  left_join(all_2017 %>% rename_with(~paste0(., "_past"), -(1:2)), by = c("batter", "Name"))
+
+predict_19 <- all_2019 %>%
+  rename_with(~paste0(., "_future"), -(1:2)) %>% select(-contains("_future"), year_future, EAGLE_future, wRC_Plus_future) %>%
+  left_join(all_2018 %>% rename_with(~paste0(., "_past"), -(1:2)), by = c("batter", "Name"))
+
+predict_20 <- all_2020 %>%
+  rename_with(~paste0(., "_future"), -(1:2)) %>% select(-contains("_future"), year_future, EAGLE_future, wRC_Plus_future) %>%
+  left_join(all_2019 %>% rename_with(~paste0(., "_past"), -(1:2)), by = c("batter", "Name"))
+
+predict_21 <- all_2021 %>%
+  rename_with(~paste0(., "_future"), -(1:2)) %>% select(-contains("_future"), year_future, EAGLE_future, wRC_Plus_future) %>%
+  left_join(all_2020 %>% rename_with(~paste0(., "_past"), -(1:2)), by = c("batter", "Name"))
+
+predict_future <- rbind(predict_17, predict_18, predict_19, predict_20, predict_21)
+```
+
+```{r}
+correlation <- cor(predict_future$EAGLE_past, predict_future$wRC_Plus_future, use = "complete.obs")
+
+ggplot(predict_future, aes(x = EAGLE_past, y = wRC_Plus_future)) +
+  geom_point(color = "royalblue3", alpha = 0.5) +
+  geom_smooth(method = "lm", color = "red", se = FALSE) +
+  scale_x_continuous(breaks = pretty_breaks(n = 10)) +
+  scale_y_continuous(breaks = pretty_breaks(n = 10)) +
+  theme_minimal() +
+  theme(plot.title = element_text(face = "bold"),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank()) +
+  annotate("text", x = max(predict_future$EAGLE_past, na.rm = TRUE),
+           y = min(predict_future$wRC_Plus_future, na.rm = TRUE), 
+           label = paste("Correlation =", round(correlation, 2)), hjust = 1, vjust = 0) +
+  labs(title = "Relationship Between EAGLE and Future wRC+",
+       x = "EAGLE", y = "Future wRC+")
+```
+
+# Reliability
+
+```{r}
+correlation <- cor(predict_future$EAGLE_past, predict_future$EAGLE_future, use = "complete.obs")
+
+ggplot(predict_future, aes(x = EAGLE_past, y = EAGLE_future)) +
+  geom_point(color = "royalblue3", alpha = 0.5) +
+  geom_smooth(method = "lm", color = "red", se = FALSE) +
+  scale_x_continuous(breaks = pretty_breaks(n = 10)) +
+  scale_y_continuous(breaks = pretty_breaks(n = 10)) +
+  theme_minimal() +
+  theme(plot.title = element_text(face = "bold"),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank()) +
+  annotate("text", x = max(predict_future$EAGLE_past, na.rm = TRUE),
+           y = min(predict_future$EAGLE_future, na.rm = TRUE), 
+           label = paste("Correlation =", round(correlation, 2)), hjust = 1, vjust = 0) +
+  labs(title = "Relationship Between EAGLE and Future EAGLE",
+       x = "EAGLE", y = "Future EAGLE")
+```
+
+
+
+
+
