@@ -1,0 +1,173 @@
+# Front Matter ##########
+
+```{r}
+# Load libraries
+library(tidyverse)
+
+# Set working directory
+wd <- "C:/Users/malco/Documents/GitHub/DS340W/" # Change as needed
+
+# Read in data
+mlb_data <- read.csv(paste0(wd, "project/volume/data/raw/sc_2021_2023.csv"))
+```
+
+# Exploratory Data Analysis ##########
+
+```{r}
+# View data
+glimpse(mlb_data)
+```
+```{r}
+# Check for missing values
+colSums(is.na(mlb_data))
+```
+
+```{r}
+# Create pitch count
+mlb_data <- mlb_data %>%
+  filter(strikes < 3, balls < 4) %>%
+  mutate(pitch_count = paste0(balls, "-", strikes))
+```
+
+```{r}
+# Form batted ball classification
+mlb_data <- mlb_data %>%
+  mutate(bbe_type = case_when(
+    (launch_speed * 1.5 - launch_angle >= 117) & (launch_speed + launch_angle >= 124) & (launch_speed >= 98) & (launch_angle > 4 & launch_angle < 50) ~ "barrel",
+    (launch_speed * 1.5 - launch_angle >= 111) & (launch_speed + launch_angle >= 119) & (launch_speed >= 95) & (launch_angle > 0 & launch_angle < 52) ~ "solid_contact",
+    (launch_speed <= 59) ~ "poorly_weak",
+    (launch_speed * 2 - launch_angle >= 87) & (launch_angle <= 41) & (launch_speed * 2 + launch_angle <= 175) & (launch_speed + launch_angle * 1.3 >= 89) & (launch_speed > 59 & launch_speed < 72) ~ "flare_burner",
+    (launch_speed + launch_angle * 1.3 <= 112) & (launch_speed + launch_angle * 1.55 >= 92) & (launch_speed > 72 & launch_speed < 86) ~ "flare_burner",
+    (launch_angle <= 20) & (launch_speed + launch_angle * 2.4 >= 98) & (launch_speed > 86 & launch_speed < 95) ~ "flare_burner",
+    (launch_speed - launch_angle >= 76) & (launch_speed + launch_angle * 2.4 >= 98) & (launch_speed >= 95) & (launch_angle <= 30) ~ "flare_burner",
+    (launch_speed + launch_angle * 2 >= 116) ~ "poorly_under",
+    (launch_speed + launch_angle * 2 <= 116) ~ "poorly_topped",
+    TRUE ~ NA_character_))
+```
+
+```{r}
+# View pitch types
+mlb_data %>%
+  group_by(pitch_type) %>%
+  summarise(count = n()) %>%
+  arrange(desc(count))
+```
+
+```{r}
+# Create pitch group
+mlb_data <- mlb_data %>%
+  mutate(pitch_group = case_when(
+    pitch_type %in% c("FF", "SI") ~ "FB",
+    pitch_type %in% c("SL", "CU", "FC", "ST", "KC", "SV") ~ "BB",
+    pitch_type %in% c("CH", "FS") ~ "OS",
+    TRUE ~ NA_character_))
+```
+
+```{r}
+# View pitch group
+mlb_data %>% group_by(pitch_group) %>% summarise(count = n()) %>% arrange(desc(count))
+```
+
+```{r}
+# View description
+mlb_data %>% group_by(description) %>% summarise(count = n()) %>% arrange(desc(count))
+```
+
+```{r}
+# View events
+mlb_data %>% group_by(events) %>% summarise(count = n()) %>% arrange(desc(count))
+
+mlb_data %>% filter(description == "hit_into_play") %>% group_by(events) %>% summarise(count = n()) %>% arrange(desc(count))
+```
+
+```{r}
+# View BBE types
+mlb_data %>% filter(description == "hit_into_play") %>% group_by(bbe_type) %>% summarise(count = n())
+```
+
+```{r}
+# Modify description
+mlb_data <- mlb_data %>%
+  mutate(description = ifelse(description == "blocked_ball", "ball", description),
+         description = ifelse(description == "swinging_strike_blocked", "swinging_strike", description),
+         description = ifelse(description == "foul_tip", "foul", description)) %>%
+  filter(!(description %in% c("foul_bunt", "missed_bunt", "pitchout", "bunt_foul_tip", "foul_pitchout", "unknown_strike")))
+```
+
+```{r}
+# View updated description
+mlb_data %>% group_by(description) %>% summarise(count = n()) %>% arrange(desc(count))
+```
+
+```{r}
+# Remove BBE with now BBE types
+mlb_data <- mlb_data %>%
+  filter(description != "hit_into_play" | description == "hit_into_play" & !is.na(bbe_type))
+```
+
+```{r}
+# View updated BBE types
+mlb_data %>% filter(description == "hit_into_play") %>% group_by(bbe_type) %>% summarise(count = n())
+```
+
+```{r}
+# Count-dependent run value of non-swinging events
+mlb_data %>%
+  filter(description %in% c("ball", "called_strike", "hit_by_pitch")) %>%
+  group_by(description, pitch_count) %>%
+  summarise(run_value = mean(delta_run_exp, na.rm = TRUE))
+```
+
+```{r}
+# Count-dependent run value of swinging events
+mlb_data %>%
+  filter(description %in% c("foul", "swinging_strike")) %>%
+  group_by(description, pitch_count) %>%
+  summarise(run_value = mean(delta_run_exp, na.rm = TRUE))
+```
+
+```{r}
+# Count-dependent run value of batted ball events
+mlb_data %>%
+  filter(description %in% c("hit_into_play")) %>%
+  group_by(bbe_type, pitch_count) %>%
+  summarise(run_value = mean(delta_run_exp, na.rm = TRUE))
+```
+
+```{r}
+# Split data into no swing and swing
+no_swing <- mlb_data %>% filter(description %in% c("ball", "called_strike", "hit_by_pitch"))
+
+swing <- mlb_data %>%
+  filter(description %in% c("foul", "swinging_strike", "hit_into_play")) %>%
+  mutate(description = ifelse(description == "hit_into_play", bbe_type, description))
+```
+
+```{r}
+# View description of new data frames
+no_swing %>% group_by(description) %>% summarise(count = n()) %>% arrange(desc(count))
+swing %>% group_by(description) %>% summarise(count = n()) %>% arrange(desc(count))
+```
+
+```{r}
+# Save run values of events
+no_swing_run_values <- no_swing %>%
+  group_by(description, pitch_count) %>%
+  summarise(run_value = mean(delta_run_exp, na.rm = TRUE))
+
+no_swing_run_values
+
+swing_run_values <- swing %>%
+  group_by(description, pitch_count) %>%
+  summarise(run_value = mean(delta_run_exp, na.rm = TRUE))
+
+swing_run_values
+```
+
+```{r}
+# Write data to interim
+write.csv(no_swing, paste0(wd, "project/volume/data/interim/no_swing.csv"), row.names = FALSE)
+write.csv(swing, paste0(wd, "project/volume/data/interim/swing.csv"), row.names = FALSE)
+write.csv(no_swing_run_values, paste0(wd, "project/volume/data/interim/no_swing_run_values.csv"), row.names = FALSE)
+write.csv(swing_run_values, paste0(wd, "project/volume/data/interim/swing_run_values.csv"), row.names = FALSE)
+```

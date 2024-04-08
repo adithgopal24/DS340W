@@ -1,0 +1,356 @@
+# Front Matter
+
+```{r}
+# Load libraries
+library(tidyverse)
+library(tidymodels)
+library(xgboost)
+library(scales)
+library(wCorr)
+
+# Set working directory
+wd <- "C:/Users/malco/Documents/GitHub/DS340W/" # Change directory as needed
+
+# Load EAGLE data
+data_2016 <- readRDS(paste0(wd, "project/src/validate/EAGLE_2016.rds"))
+data_2017 <- readRDS(paste0(wd, "project/src/validate/EAGLE_2017.rds"))
+data_2018 <- readRDS(paste0(wd, "project/src/validate/EAGLE_2018.rds"))
+data_2019 <- readRDS(paste0(wd, "project/src/validate/EAGLE_2019.rds"))
+data_2020 <- readRDS(paste0(wd, "project/src/validate/EAGLE_2020.rds"))
+data_2021 <- readRDS(paste0(wd, "project/src/validate/EAGLE_2021.rds"))
+
+# Load FanGraphs data
+fg_data <- read.csv(paste0(wd, "project/src/validate/fangraphs-leaderboards.csv"))
+fg_data <- fg_data %>%
+  mutate(season = as.character(season), z_o_swing_rate = z_swing_rate - o_swing_rate)
+
+fg_2016 <- fg_data %>% filter(season == 2016)
+fg_2017 <- fg_data %>% filter(season == 2017)
+fg_2018 <- fg_data %>% filter(season == 2018)
+fg_2019 <- fg_data %>% filter(season == 2019)
+fg_2020 <- fg_data %>% filter(season == 2020)
+fg_2021 <- fg_data %>% filter(season == 2021)
+fg_2022 <- fg_data %>% filter(season == 2022)
+fg_2023 <- fg_data %>% filter(season == 2023)
+
+# Load SDG models
+no_swing_model <- readRDS(paste0(wd, "project/volume/models/no_swing.rds"))
+swing_model <- readRDS(paste0(wd, "project/volume/models/swing.rds"))
+
+# Load MLB pitch by pitch data
+pitch_data <- read.csv(paste0(wd, "project/volume/data/raw/sc_2021_2023.csv"))
+swing_decisions_data <- pitch_data %>% filter(description %in% c("ball", "foul", "hit_into_play", "called_strike", "swinging_strike", "blocked_ball", "foul_tip", "swinging_strike_blocked", "hit_by_pitch"))
+
+# Separate pitches into takes and swings
+swinging_events <- c("foul", "hit_into_play", "swinging_strike", "foul_tip", "swinging_strike_blocked")
+swing_decisions_data <- swing_decisions_data %>% mutate(swing = ifelse(description %in% swinging_events, 1, 0))
+
+# Create pitch count
+swing_decisions_data <- swing_decisions_data %>%
+  filter(strikes < 3, balls < 4) %>%
+  mutate(pitch_count = paste0(balls, "-", strikes))
+
+# Create pitch group
+swing_decisions_data <- swing_decisions_data %>%
+  mutate(pitch_group = case_when(
+    pitch_type %in% c("FF", "SI") ~ "FB",
+    pitch_type %in% c("SL", "CU", "FC", "ST", "KC", "SV") ~ "BB",
+    pitch_type %in% c("CH", "FS") ~ "OS",
+    TRUE ~ NA_character_))
+
+# Create id variable
+swing_decisions_data <- swing_decisions_data %>% mutate(id = row_number())
+
+swing_decisions_data <- swing_decisions_data %>% select(id, batter, player_name, game_year, swing, pitch_count, plate_x, plate_z, p_throws, stand, pitch_group)
+
+# Load in count-dependent run values
+no_swing_run_values <- read.csv(paste0(wd, "project/volume/data/interim/no_swing_run_values.csv"))
+swing_run_values <- read.csv(paste0(wd, "project/volume/data/interim/swing_run_values.csv"))
+
+no_swing_run_values <- pivot_wider(no_swing_run_values, names_from = description, values_from = run_value, names_prefix = "rv_")
+swing_run_values <- pivot_wider(swing_run_values, names_from = description, values_from = run_value, names_prefix = "rv_")
+```
+
+# Recreate EAGLE
+
+```{r}
+# Calculate EAGLE
+eagle_2016 <- data_2016 %>% filter(!is.na(expRA_swing)) %>% group_by(batter, Name) %>% summarize(year = first(season.x), runs_lost = sum(runs_lost_bad_dec) / sum(abs_eRA_s), wRA = sum(ifelse(swing == 1, expRA_swing, -expRA_swing)), EAGLE = wRA / n(), avg = first(BA), obp = first(OBP), ops = first(OPS),  kperc = first(SO.x) / first(PA), bbperc = first(BB.x) / first(PA), perc_swing_out_zone = sum(ifelse(strike_prob < .3 & swing == 1, 1, 0)) / sum(ifelse(strike_prob < .3, 1, 0))) %>% select(batter, year, EAGLE)
+
+eagle_2017 <- data_2017 %>% filter(!is.na(expRA_swing)) %>% group_by(batter, Name) %>% summarize(year = first(season.x), runs_lost = sum(runs_lost_bad_dec) / sum(abs_eRA_s), wRA = sum(ifelse(swing == 1, expRA_swing, -expRA_swing)), EAGLE = wRA / n(), avg = first(BA), obp = first(OBP), ops = first(OPS),  kperc = first(SO.x) / first(PA), bbperc = first(BB.x) / first(PA), perc_swing_out_zone = sum(ifelse(strike_prob < .3 & swing == 1, 1, 0)) / sum(ifelse(strike_prob < .3, 1, 0))) %>% select(batter, year, EAGLE)
+
+eagle_2018 <- data_2018 %>% filter(!is.na(expRA_swing)) %>% group_by(batter, Name) %>% summarize(year = first(season.x), runs_lost = sum(runs_lost_bad_dec) / sum(abs_eRA_s), wRA = sum(ifelse(swing == 1, expRA_swing, -expRA_swing)), EAGLE = wRA / n(), avg = first(BA), obp = first(OBP), ops = first(OPS),  kperc = first(SO.x) / first(PA), bbperc = first(BB.x) / first(PA), perc_swing_out_zone = sum(ifelse(strike_prob < .3 & swing == 1, 1, 0)) / sum(ifelse(strike_prob < .3, 1, 0))) %>% select(batter, year, EAGLE)
+
+eagle_2019 <- data_2019 %>% filter(!is.na(expRA_swing)) %>% group_by(batter, Name) %>% summarize(year = first(season.x), runs_lost = sum(runs_lost_bad_dec) / sum(abs_eRA_s), wRA = sum(ifelse(swing == 1, expRA_swing, -expRA_swing)), EAGLE = wRA / n(), avg = first(BA), obp = first(OBP), ops = first(OPS),  kperc = first(SO.x) / first(PA), bbperc = first(BB.x) / first(PA), perc_swing_out_zone = sum(ifelse(strike_prob < .3 & swing == 1, 1, 0)) / sum(ifelse(strike_prob < .3, 1, 0))) %>% select(batter, year, EAGLE)
+
+eagle_2020 <- data_2020 %>% filter(!is.na(expRA_swing)) %>% group_by(batter, Name) %>% summarize(year = first(season.x), runs_lost = sum(runs_lost_bad_dec) / sum(abs_eRA_s), wRA = sum(ifelse(swing == 1, expRA_swing, -expRA_swing)), EAGLE = wRA / n(), avg = first(BA), obp = first(OBP), ops = first(OPS),  kperc = first(SO.x) / first(PA), bbperc = first(BB.x) / first(PA), perc_swing_out_zone = sum(ifelse(strike_prob < .3 & swing == 1, 1, 0)) / sum(ifelse(strike_prob < .3, 1, 0))) %>% select(batter, year, EAGLE)
+
+eagle_2021 <- data_2021 %>% filter(!is.na(expRA_swing)) %>% group_by(batter, Name) %>% summarize(year = first(season.x), runs_lost = sum(runs_lost_bad_dec) / sum(abs_eRA_s), wRA = sum(ifelse(swing == 1, expRA_swing, -expRA_swing)), EAGLE = wRA / n(), avg = first(BA), obp = first(OBP), ops = first(OPS),  kperc = first(SO.x) / first(PA), bbperc = first(BB.x) / first(PA), perc_swing_out_zone = sum(ifelse(strike_prob < .3 & swing == 1, 1, 0)) / sum(ifelse(strike_prob < .3, 1, 0))) %>% select(batter, year, EAGLE)
+```
+
+# Create SDG
+
+```{r}
+# Probability of events (given a take)
+no_swing_preds <- predict(no_swing_model, swing_decisions_data, type = "prob") %>%
+  bind_cols(swing_decisions_data)
+
+# Remove predictions with missing data
+no_swing_preds <- no_swing_preds %>% filter(!is.na(plate_x), !is.na(plate_z), !is.na(pitch_group))
+```
+
+```{r}
+# Probability of events (given a swing)
+swing_preds <- predict(swing_model, swing_decisions_data, type = "prob") %>%
+  bind_cols(swing_decisions_data)
+
+# Remove predictions with missing data
+swing_preds <- swing_preds %>% filter(!is.na(plate_x), !is.na(plate_z), !is.na(pitch_group))
+```
+
+```{r}
+# Merge predictions
+preds <- no_swing_preds %>% left_join(swing_preds %>% select(id, contains("pred")), by = "id")
+
+preds <- preds %>%
+  select(id, batter, player_name, game_year, pitch_count,
+         plate_x, plate_z, p_throws, stand, pitch_group,
+         contains(".pred"),
+         swing)
+```
+
+```{r}
+# Merge count-dependent run values of events
+preds <- preds %>% left_join(no_swing_run_values, by = "pitch_count")
+preds <- preds %>% left_join(swing_run_values, by = "pitch_count")
+```
+
+```{r}
+# Estimate run value of not swinging and run value of swinging
+sdg <- preds %>%
+  mutate(rv_no_swing = .pred_ball * rv_ball + .pred_called_strike * rv_called_strike + .pred_hit_by_pitch * rv_hit_by_pitch,
+         rv_swing = .pred_barrel * rv_barrel + .pred_flare_burner * rv_flare_burner + .pred_foul * rv_foul + .pred_poorly_topped * rv_poorly_topped + .pred_poorly_under * rv_poorly_under + .pred_poorly_weak * rv_poorly_weak + .pred_solid_contact * rv_solid_contact + .pred_swinging_strike * rv_swinging_strike)
+```
+
+```{r}
+# Calculate SDG based on swing decision
+sdg <- sdg %>%
+  mutate(sdg = ifelse(swing == 1, rv_swing - rv_no_swing, rv_no_swing - rv_swing))
+```
+
+```{r}
+# Calculate SDG for all batter/year combinations
+sdg_season <- sdg %>%
+  group_by(batter, game_year) %>%
+  summarise(pitches_seen = n(),
+            sdg = mean(sdg, na.rm = TRUE))
+```
+
+```{r}
+# Calculate the mean and standard deviation of SDG for qualified players
+qual_sdg <- sdg_season %>% filter(pitches_seen >= 500)
+
+mean_sdg <- mean(qual_sdg$sdg)
+sd_sdg <- sd(qual_sdg$sdg)
+
+# Scale sdg according to the new criteria
+sdg_season$sdg_scaled <- sapply(sdg_season$sdg, function(x) {
+  # Calculate scaled value based on SD difference from the mean, times 10, plus 50
+  scaled_value <- (x - mean_sdg) / sd_sdg * 10 + 50
+  
+  # Cap the values at 20 and 80
+  if (scaled_value > 80) {
+    return(80)
+  } else if (scaled_value < 20) {
+    return(20)
+  } else {
+    return(scaled_value)
+  }
+})
+```
+
+
+# Comparison Measures
+
+## EAGLE
+
+```{r}
+eagle_2016 <- eagle_2016 %>% left_join(fg_2016, by = c("batter" = "MLBAMID", "year" = "season")) %>% select(batter, name, everything())
+eagle_2017 <- eagle_2017 %>% left_join(fg_2017, by = c("batter" = "MLBAMID", "year" = "season")) %>% select(batter, name, everything())
+eagle_2018 <- eagle_2018 %>% left_join(fg_2018, by = c("batter" = "MLBAMID", "year" = "season")) %>% select(batter, name, everything())
+eagle_2019 <- eagle_2019 %>% left_join(fg_2019, by = c("batter" = "MLBAMID", "year" = "season")) %>% select(batter, name, everything())
+eagle_2020 <- eagle_2020 %>% left_join(fg_2020, by = c("batter" = "MLBAMID", "year" = "season")) %>% select(batter, name, everything())
+eagle_2021 <- eagle_2021 %>% left_join(fg_2021, by = c("batter" = "MLBAMID", "year" = "season")) %>% select(batter, name, everything())
+
+eagle_2016_2021 <- rbind(eagle_2016, eagle_2017, eagle_2018, eagle_2019, eagle_2020, eagle_2021) %>% filter(!is.na(EAGLE), !is.na(z_o_swing_rate), !is.na(pa))
+```
+
+```{r}
+# Descriptiveness
+correlation <- weightedCorr(x = eagle_2016_2021$EAGLE, y = eagle_2016_2021$z_o_swing_rate, method = "spearman", weights = eagle_2016_2021$pa)
+
+ggplot(eagle_2016_2021 %>% filter(pa >= 200), aes(x = EAGLE, y = z_o_swing_rate)) +
+  geom_point(color = "royalblue3", alpha = 0.5) +
+  geom_smooth(method = "lm", color = "red", se = FALSE) +
+  scale_x_continuous(breaks = pretty_breaks(n = 10)) +
+  scale_y_continuous(breaks = pretty_breaks(n = 10)) +
+  theme(plot.title = element_text(face = "bold"),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank()) +
+  labs(title = "Relationship Between EAGLE and Z-O Swing%",
+       x = "EAGLE", y = "Z-O Swing%")
+
+correlation
+```
+
+```{r}
+# Restructure data
+predict_17 <- eagle_2017 %>%
+  rename_with(~paste0(., "_future"), -(1:2)) %>% select(-contains("_future"), year_future, pa_future, EAGLE_future, wrc_plus_future, z_o_swing_rate_future) %>%
+  left_join(eagle_2016 %>% rename_with(~paste0(., "_past"), -(1:2)), by = c("batter", "name"))
+
+predict_18 <- eagle_2018 %>%
+  rename_with(~paste0(., "_future"), -(1:2)) %>% select(-contains("_future"), year_future, pa_future, EAGLE_future, wrc_plus_future, z_o_swing_rate_future) %>%
+  left_join(eagle_2017 %>% rename_with(~paste0(., "_past"), -(1:2)), by = c("batter", "name"))
+
+predict_19 <- eagle_2019 %>%
+  rename_with(~paste0(., "_future"), -(1:2)) %>% select(-contains("_future"), year_future, pa_future, EAGLE_future, wrc_plus_future, z_o_swing_rate_future) %>%
+  left_join(eagle_2018 %>% rename_with(~paste0(., "_past"), -(1:2)), by = c("batter", "name"))
+
+predict_20 <- eagle_2020 %>%
+  rename_with(~paste0(., "_future"), -(1:2)) %>% select(-contains("_future"), year_future, pa_future, EAGLE_future, wrc_plus_future, z_o_swing_rate_future) %>%
+  left_join(eagle_2019 %>% rename_with(~paste0(., "_past"), -(1:2)), by = c("batter", "name"))
+
+predict_21 <- eagle_2021 %>%
+  rename_with(~paste0(., "_future"), -(1:2)) %>% select(-contains("_future"), year_future, pa_future, EAGLE_future, wrc_plus_future, z_o_swing_rate_future) %>%
+  left_join(eagle_2020 %>% rename_with(~paste0(., "_past"), -(1:2)), by = c("batter", "name"))
+
+predict_future <- rbind(predict_17, predict_18, predict_19, predict_20, predict_21)
+predict_future <- predict_future %>% mutate(weights = (pa_past + pa_future) / 2) %>% filter(!is.na(EAGLE_past), !is.na(EAGLE_future), !is.na(z_o_swing_rate_past), !is.na(z_o_swing_rate_future), !is.na(weights))
+```
+
+```{r}
+# Predictiveness
+correlation <- weightedCorr(x = predict_future$EAGLE_past, y = predict_future$z_o_swing_rate_future, method = "spearman", weights = predict_future$weights)
+
+ggplot(predict_future %>% filter(pa_past >= 200, pa_future >= 200), aes(x = EAGLE_past, y = z_o_swing_rate_future)) +
+  geom_point(color = "royalblue3", alpha = 0.5) +
+  geom_smooth(method = "lm", color = "red", se = FALSE) +
+  scale_x_continuous(breaks = pretty_breaks(n = 10)) +
+  scale_y_continuous(breaks = pretty_breaks(n = 10)) +
+  theme(plot.title = element_text(face = "bold"),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank()) +
+  labs(title = "Relationship Between EAGLE and Future Z-O Swing%",
+       x = "EAGLE", y = "Future Z-O Swing%")
+
+correlation
+```
+
+
+```{r}
+# Reliability
+correlation <- weightedCorr(x = predict_future$EAGLE_past, y = predict_future$EAGLE_future, method = "spearman", weights = predict_future$weights)
+
+ggplot(predict_future %>% filter(pa_past >= 200, pa_future >= 200), aes(x = EAGLE_past, y = EAGLE_future)) +
+  geom_point(color = "royalblue3", alpha = 0.5) +
+  geom_smooth(method = "lm", color = "red", se = FALSE) +
+  scale_x_continuous(breaks = pretty_breaks(n = 10)) +
+  scale_y_continuous(breaks = pretty_breaks(n = 10)) +
+  theme(plot.title = element_text(face = "bold"),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank()) +
+  labs(title = "Relationship Between EAGLE and Future EAGLE",
+       x = "EAGLE", y = "Future EAGLE")
+
+correlation
+```
+
+## SDG
+
+```{r}
+sdg_2020 <- sdg_season %>% filter(game_year == 2020)
+sdg_2021 <- sdg_season %>% filter(game_year == 2021)
+sdg_2022 <- sdg_season %>% filter(game_year == 2022)
+sdg_2023 <- sdg_season %>% filter(game_year == 2023)
+
+
+sdg_2020 <- sdg_2020 %>% left_join(fg_2020 %>% mutate(season = as.integer(season)), by = c("batter" = "MLBAMID", "game_year" = "season")) %>% filter(pa >= 200)
+sdg_2021 <- sdg_2021 %>% left_join(fg_2021 %>% mutate(season = as.integer(season)), by = c("batter" = "MLBAMID", "game_year" = "season")) %>% filter(pa >= 200)
+sdg_2022 <- sdg_2022 %>% left_join(fg_2022 %>% mutate(season = as.integer(season)), by = c("batter" = "MLBAMID", "game_year" = "season")) %>% filter(pa >= 200)
+sdg_2023 <- sdg_2023 %>% left_join(fg_2023 %>% mutate(season = as.integer(season)), by = c("batter" = "MLBAMID", "game_year" = "season")) %>% filter(pa >= 200)
+
+sdg_2020_2023 <- rbind(sdg_2020, sdg_2021, sdg_2022, sdg_2023)
+```
+
+```{r}
+# Descriptiveness
+correlation <- weightedCorr(x = sdg_2020_2023$sdg, y = sdg_2020_2023$z_o_swing_rate, method = "spearman", weights = sdg_2020_2023$pa)
+
+ggplot(sdg_2020_2023, aes(x = sdg, y = z_o_swing_rate)) +
+  geom_point(color = "royalblue3", alpha = 0.5) +
+  geom_smooth(method = "lm", color = "red", se = FALSE) +
+  scale_x_continuous(breaks = pretty_breaks(n = 10)) +
+  scale_y_continuous(breaks = pretty_breaks(n = 10)) +
+  theme(plot.title = element_text(face = "bold"),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank()) +
+  labs(title = "Relationship Between SDG and Z-O Swing%",
+       x = "SDG", y = "Z-O Swing%")
+
+correlation
+```
+
+```{r}
+# Restructure data
+predict_21 <- sdg_2021 %>%
+  rename_with(~paste0(., "_future"), -(1:1)) %>% select(-contains("_future"), game_year_future, pa_future, sdg_future, wrc_plus_future, z_o_swing_rate_future) %>%
+  left_join(sdg_2020 %>% rename_with(~paste0(., "_past"), -(1:2)), by = c("batter"))
+
+predict_22 <- sdg_2022 %>%
+  rename_with(~paste0(., "_future"), -(1:1)) %>% select(-contains("_future"), game_year_future, pa_future, sdg_future, wrc_plus_future, z_o_swing_rate_future) %>%
+  left_join(sdg_2021 %>% rename_with(~paste0(., "_past"), -(1:2)), by = c("batter"))
+
+predict_23 <- sdg_2023 %>%
+  rename_with(~paste0(., "_future"), -(1:1)) %>% select(-contains("_future"), game_year_future, pa_future, sdg_future, wrc_plus_future, z_o_swing_rate_future) %>%
+  left_join(sdg_2022 %>% rename_with(~paste0(., "_past"), -(1:2)), by = c("batter"))
+
+predict_future <- rbind(predict_21, predict_22, predict_23)
+predict_future <- predict_future %>% mutate(weights = (pa_past + pa_future) / 2) %>% filter(!is.na(sdg_past), !is.na(sdg_future), !is.na(z_o_swing_rate_past), !is.na(z_o_swing_rate_future), !is.na(weights))
+```
+
+```{r}
+# Predictiveness
+correlation <- weightedCorr(x = predict_future$sdg_past, y = predict_future$z_o_swing_rate_future, method = "spearman", weights = predict_future$weights)
+
+ggplot(predict_future, aes(x = sdg_past, y = z_o_swing_rate_future)) +
+  geom_point(color = "royalblue3", alpha = 0.5) +
+  geom_smooth(method = "lm", color = "red", se = FALSE) +
+  scale_x_continuous(breaks = pretty_breaks(n = 10)) +
+  scale_y_continuous(breaks = pretty_breaks(n = 10)) +
+  theme(plot.title = element_text(face = "bold"),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank()) +
+  labs(title = "Relationship Between SDG and Future Z-O Swing%",
+       x = "SDG", y = "Future Z-O Swing%")
+
+correlation
+```
+
+```{r}
+# Reliability
+correlation <- weightedCorr(x = predict_future$sdg_past, y = predict_future$sdg_future, method = "spearman", weights = predict_future$weights)
+
+ggplot(predict_future, aes(x = sdg_past, y = sdg_future)) +
+  geom_point(color = "royalblue3", alpha = 0.5) +
+  geom_smooth(method = "lm", color = "red", se = FALSE) +
+  scale_x_continuous(breaks = pretty_breaks(n = 10)) +
+  scale_y_continuous(breaks = pretty_breaks(n = 10)) +
+  theme(plot.title = element_text(face = "bold"),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank()) +
+  labs(title = "Relationship Between SDG and Future SDG",
+       x = "SDG", y = "Future SDG")
+
+correlation
+```
