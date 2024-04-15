@@ -1,4 +1,5 @@
 # DS340W: Estimating Swing Decision Quality in Major League Baseball
+## Ted Zerbe and Adith Gopal
 
 We aim to improve upon existing measurements of batter plate discipline, or swing decision quality, in Major League Baseball. For every pitch a batter sees, he has the decision to swing at or take that pitch. Taking a pitch can result in a ball, a strike, or a hit by pitch. Swinging at a pitch can result in a miss, foul, out, or various batted ball types ranging from weak contact to barrels. By using two separate machine learning models, one for no swings and one for swings, we can estimate the probability of each event occuring given the location of the pitch. Knowing the value of each outcome using run values (barrels are good, outs are bad, etc.), we can combine this information with the probabilities calculated to determine the Swing Decision Grade (SDG) for every pitch thrown in the league. These results can be aggregated for each player to estimate SDG for all MLB batters. We compare SDG to EAGLE and Z-O Swing% via the comparison measures of descriptiveness, predictiveness, and reliability.
 
