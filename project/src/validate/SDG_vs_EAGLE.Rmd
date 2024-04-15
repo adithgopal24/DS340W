@@ -182,14 +182,14 @@ eagle_2019 <- eagle_2019 %>% left_join(fg_2019, by = c("batter" = "MLBAMID", "ye
 eagle_2020 <- eagle_2020 %>% left_join(fg_2020, by = c("batter" = "MLBAMID", "year" = "season")) %>% select(batter, name, everything())
 eagle_2021 <- eagle_2021 %>% left_join(fg_2021, by = c("batter" = "MLBAMID", "year" = "season")) %>% select(batter, name, everything())
 
-eagle_2016_2021 <- rbind(eagle_2016, eagle_2017, eagle_2018, eagle_2019, eagle_2020, eagle_2021) %>% filter(!is.na(EAGLE), !is.na(z_o_swing_rate), !is.na(pa))
+eagle_2016_2021 <- rbind(eagle_2016, eagle_2017, eagle_2018, eagle_2019, eagle_2020, eagle_2021) %>% filter(!is.na(EAGLE), !is.na(ops), !is.na(pa))
 ```
 
 ```{r}
 # Descriptiveness
-correlation <- weightedCorr(x = eagle_2016_2021$EAGLE, y = eagle_2016_2021$z_o_swing_rate, method = "spearman", weights = eagle_2016_2021$pa)
+correlation <- weightedCorr(x = eagle_2016_2021$EAGLE, y = eagle_2016_2021$ops, method = "spearman", weights = eagle_2016_2021$pa)
 
-ggplot(eagle_2016_2021 %>% filter(pa >= 200), aes(x = EAGLE, y = z_o_swing_rate)) +
+ggplot(eagle_2016_2021 %>% filter(pa > 200), aes(x = EAGLE, y = ops)) +
   geom_point(color = "royalblue3", alpha = 0.5) +
   geom_smooth(method = "lm", color = "red", se = FALSE) +
   scale_x_continuous(breaks = pretty_breaks(n = 10)) +
@@ -197,8 +197,8 @@ ggplot(eagle_2016_2021 %>% filter(pa >= 200), aes(x = EAGLE, y = z_o_swing_rate)
   theme(plot.title = element_text(face = "bold"),
         panel.grid.major = element_blank(),
         panel.grid.minor = element_blank()) +
-  labs(title = "Relationship Between EAGLE and Z-O Swing%",
-       x = "EAGLE", y = "Z-O Swing%")
+  labs(title = "Relationship Between EAGLE and OPS",
+       x = "EAGLE", y = "OPS")
 
 correlation
 ```
@@ -206,34 +206,34 @@ correlation
 ```{r}
 # Restructure data
 predict_17 <- eagle_2017 %>%
-  rename_with(~paste0(., "_future"), -(1:2)) %>% select(-contains("_future"), year_future, pa_future, EAGLE_future, wrc_plus_future, z_o_swing_rate_future) %>%
+  rename_with(~paste0(., "_future"), -(1:2)) %>% select(-contains("_future"), year_future, pa_future, EAGLE_future, wrc_plus_future, ops_future, z_o_swing_rate_future) %>%
   left_join(eagle_2016 %>% rename_with(~paste0(., "_past"), -(1:2)), by = c("batter", "name"))
 
 predict_18 <- eagle_2018 %>%
-  rename_with(~paste0(., "_future"), -(1:2)) %>% select(-contains("_future"), year_future, pa_future, EAGLE_future, wrc_plus_future, z_o_swing_rate_future) %>%
+  rename_with(~paste0(., "_future"), -(1:2)) %>% select(-contains("_future"), year_future, pa_future, EAGLE_future, wrc_plus_future, ops_future, z_o_swing_rate_future) %>%
   left_join(eagle_2017 %>% rename_with(~paste0(., "_past"), -(1:2)), by = c("batter", "name"))
 
 predict_19 <- eagle_2019 %>%
-  rename_with(~paste0(., "_future"), -(1:2)) %>% select(-contains("_future"), year_future, pa_future, EAGLE_future, wrc_plus_future, z_o_swing_rate_future) %>%
+  rename_with(~paste0(., "_future"), -(1:2)) %>% select(-contains("_future"), year_future, pa_future, EAGLE_future, wrc_plus_future, ops_future, z_o_swing_rate_future) %>%
   left_join(eagle_2018 %>% rename_with(~paste0(., "_past"), -(1:2)), by = c("batter", "name"))
 
 predict_20 <- eagle_2020 %>%
-  rename_with(~paste0(., "_future"), -(1:2)) %>% select(-contains("_future"), year_future, pa_future, EAGLE_future, wrc_plus_future, z_o_swing_rate_future) %>%
+  rename_with(~paste0(., "_future"), -(1:2)) %>% select(-contains("_future"), year_future, pa_future, EAGLE_future, wrc_plus_future, ops_future, z_o_swing_rate_future) %>%
   left_join(eagle_2019 %>% rename_with(~paste0(., "_past"), -(1:2)), by = c("batter", "name"))
 
 predict_21 <- eagle_2021 %>%
-  rename_with(~paste0(., "_future"), -(1:2)) %>% select(-contains("_future"), year_future, pa_future, EAGLE_future, wrc_plus_future, z_o_swing_rate_future) %>%
+  rename_with(~paste0(., "_future"), -(1:2)) %>% select(-contains("_future"), year_future, pa_future, EAGLE_future, wrc_plus_future, ops_future, z_o_swing_rate_future) %>%
   left_join(eagle_2020 %>% rename_with(~paste0(., "_past"), -(1:2)), by = c("batter", "name"))
 
 predict_future <- rbind(predict_17, predict_18, predict_19, predict_20, predict_21)
-predict_future <- predict_future %>% mutate(weights = (pa_past + pa_future) / 2) %>% filter(!is.na(EAGLE_past), !is.na(EAGLE_future), !is.na(z_o_swing_rate_past), !is.na(z_o_swing_rate_future), !is.na(weights))
+predict_future <- predict_future %>% mutate(weights = (pa_past + pa_future) / 2) %>% filter(!is.na(EAGLE_past), !is.na(EAGLE_future), !is.na(ops_future), !is.na(weights))
 ```
 
 ```{r}
 # Predictiveness
-correlation <- weightedCorr(x = predict_future$EAGLE_past, y = predict_future$z_o_swing_rate_future, method = "spearman", weights = predict_future$weights)
+correlation <- weightedCorr(x = predict_future$EAGLE_past, y = predict_future$ops_future, method = "spearman", weights = predict_future$weights)
 
-ggplot(predict_future %>% filter(pa_past >= 200, pa_future >= 200), aes(x = EAGLE_past, y = z_o_swing_rate_future)) +
+ggplot(predict_future %>% filter(pa_past > 200, pa_future > 200), aes(x = EAGLE_past, y = ops_future)) +
   geom_point(color = "royalblue3", alpha = 0.5) +
   geom_smooth(method = "lm", color = "red", se = FALSE) +
   scale_x_continuous(breaks = pretty_breaks(n = 10)) +
@@ -241,8 +241,8 @@ ggplot(predict_future %>% filter(pa_past >= 200, pa_future >= 200), aes(x = EAGL
   theme(plot.title = element_text(face = "bold"),
         panel.grid.major = element_blank(),
         panel.grid.minor = element_blank()) +
-  labs(title = "Relationship Between EAGLE and Future Z-O Swing%",
-       x = "EAGLE", y = "Future Z-O Swing%")
+  labs(title = "Relationship Between EAGLE and Future OPS",
+       x = "EAGLE", y = "Future OPS")
 
 correlation
 ```
@@ -252,7 +252,7 @@ correlation
 # Reliability
 correlation <- weightedCorr(x = predict_future$EAGLE_past, y = predict_future$EAGLE_future, method = "spearman", weights = predict_future$weights)
 
-ggplot(predict_future %>% filter(pa_past >= 200, pa_future >= 200), aes(x = EAGLE_past, y = EAGLE_future)) +
+ggplot(predict_future %>% filter(pa_past > 200, pa_future > 200), aes(x = EAGLE_past, y = EAGLE_future)) +
   geom_point(color = "royalblue3", alpha = 0.5) +
   geom_smooth(method = "lm", color = "red", se = FALSE) +
   scale_x_continuous(breaks = pretty_breaks(n = 10)) +
@@ -275,19 +275,19 @@ sdg_2022 <- sdg_season %>% filter(game_year == 2022)
 sdg_2023 <- sdg_season %>% filter(game_year == 2023)
 
 
-sdg_2020 <- sdg_2020 %>% left_join(fg_2020 %>% mutate(season = as.integer(season)), by = c("batter" = "MLBAMID", "game_year" = "season")) %>% filter(pa >= 200)
-sdg_2021 <- sdg_2021 %>% left_join(fg_2021 %>% mutate(season = as.integer(season)), by = c("batter" = "MLBAMID", "game_year" = "season")) %>% filter(pa >= 200)
-sdg_2022 <- sdg_2022 %>% left_join(fg_2022 %>% mutate(season = as.integer(season)), by = c("batter" = "MLBAMID", "game_year" = "season")) %>% filter(pa >= 200)
-sdg_2023 <- sdg_2023 %>% left_join(fg_2023 %>% mutate(season = as.integer(season)), by = c("batter" = "MLBAMID", "game_year" = "season")) %>% filter(pa >= 200)
+sdg_2020 <- sdg_2020 %>% left_join(fg_2020 %>% mutate(season = as.integer(season)), by = c("batter" = "MLBAMID", "game_year" = "season"))
+sdg_2021 <- sdg_2021 %>% left_join(fg_2021 %>% mutate(season = as.integer(season)), by = c("batter" = "MLBAMID", "game_year" = "season"))
+sdg_2022 <- sdg_2022 %>% left_join(fg_2022 %>% mutate(season = as.integer(season)), by = c("batter" = "MLBAMID", "game_year" = "season"))
+sdg_2023 <- sdg_2023 %>% left_join(fg_2023 %>% mutate(season = as.integer(season)), by = c("batter" = "MLBAMID", "game_year" = "season"))
 
-sdg_2020_2023 <- rbind(sdg_2020, sdg_2021, sdg_2022, sdg_2023)
+sdg_2020_2023 <- rbind(sdg_2020, sdg_2021, sdg_2022, sdg_2023) %>% filter(!is.na(sdg_scaled), !is.na(ops), !is.na(pa))
 ```
 
 ```{r}
 # Descriptiveness
-correlation <- weightedCorr(x = sdg_2020_2023$sdg, y = sdg_2020_2023$z_o_swing_rate, method = "spearman", weights = sdg_2020_2023$pa)
+correlation <- weightedCorr(x = sdg_2020_2023$sdg_scaled, y = sdg_2020_2023$ops, method = "spearman", weights = sdg_2020_2023$pa)
 
-ggplot(sdg_2020_2023, aes(x = sdg, y = z_o_swing_rate)) +
+ggplot(sdg_2020_2023 %>% filter(pa > 200), aes(x = sdg_scaled, y = ops)) +
   geom_point(color = "royalblue3", alpha = 0.5) +
   geom_smooth(method = "lm", color = "red", se = FALSE) +
   scale_x_continuous(breaks = pretty_breaks(n = 10)) +
@@ -295,8 +295,8 @@ ggplot(sdg_2020_2023, aes(x = sdg, y = z_o_swing_rate)) +
   theme(plot.title = element_text(face = "bold"),
         panel.grid.major = element_blank(),
         panel.grid.minor = element_blank()) +
-  labs(title = "Relationship Between SDG and Z-O Swing%",
-       x = "SDG", y = "Z-O Swing%")
+  labs(title = "Relationship Between SDG and OPS",
+       x = "SDG", y = "OPS")
 
 correlation
 ```
@@ -304,26 +304,26 @@ correlation
 ```{r}
 # Restructure data
 predict_21 <- sdg_2021 %>%
-  rename_with(~paste0(., "_future"), -(1:1)) %>% select(-contains("_future"), game_year_future, pa_future, sdg_future, wrc_plus_future, z_o_swing_rate_future) %>%
+  rename_with(~paste0(., "_future"), -(1:1)) %>% select(-contains("_future"), game_year_future, pa_future, sdg_future, sdg_scaled_future, wrc_plus_future, ops_future, z_o_swing_rate_future) %>%
   left_join(sdg_2020 %>% rename_with(~paste0(., "_past"), -(1:2)), by = c("batter"))
 
 predict_22 <- sdg_2022 %>%
-  rename_with(~paste0(., "_future"), -(1:1)) %>% select(-contains("_future"), game_year_future, pa_future, sdg_future, wrc_plus_future, z_o_swing_rate_future) %>%
+  rename_with(~paste0(., "_future"), -(1:1)) %>% select(-contains("_future"), game_year_future, pa_future, sdg_future, sdg_scaled_future, wrc_plus_future, ops_future, z_o_swing_rate_future) %>%
   left_join(sdg_2021 %>% rename_with(~paste0(., "_past"), -(1:2)), by = c("batter"))
 
 predict_23 <- sdg_2023 %>%
-  rename_with(~paste0(., "_future"), -(1:1)) %>% select(-contains("_future"), game_year_future, pa_future, sdg_future, wrc_plus_future, z_o_swing_rate_future) %>%
+  rename_with(~paste0(., "_future"), -(1:1)) %>% select(-contains("_future"), game_year_future, pa_future, sdg_future, sdg_scaled_future, wrc_plus_future, ops_future, z_o_swing_rate_future) %>%
   left_join(sdg_2022 %>% rename_with(~paste0(., "_past"), -(1:2)), by = c("batter"))
 
 predict_future <- rbind(predict_21, predict_22, predict_23)
-predict_future <- predict_future %>% mutate(weights = (pa_past + pa_future) / 2) %>% filter(!is.na(sdg_past), !is.na(sdg_future), !is.na(z_o_swing_rate_past), !is.na(z_o_swing_rate_future), !is.na(weights))
+predict_future <- predict_future %>% mutate(weights = (pa_past + pa_future) / 2) %>% filter(!is.na(sdg_scaled_past), !is.na(sdg_scaled_future), !is.na(ops_future), !is.na(weights))
 ```
 
 ```{r}
 # Predictiveness
-correlation <- weightedCorr(x = predict_future$sdg_past, y = predict_future$z_o_swing_rate_future, method = "spearman", weights = predict_future$weights)
+correlation <- weightedCorr(x = predict_future$sdg_scaled_past, y = predict_future$ops_future, method = "spearman", weights = predict_future$weights)
 
-ggplot(predict_future, aes(x = sdg_past, y = z_o_swing_rate_future)) +
+ggplot(predict_future %>% filter(pa_past > 200, pa_future > 200), aes(x = sdg_scaled_past, y = ops_future)) +
   geom_point(color = "royalblue3", alpha = 0.5) +
   geom_smooth(method = "lm", color = "red", se = FALSE) +
   scale_x_continuous(breaks = pretty_breaks(n = 10)) +
@@ -331,17 +331,17 @@ ggplot(predict_future, aes(x = sdg_past, y = z_o_swing_rate_future)) +
   theme(plot.title = element_text(face = "bold"),
         panel.grid.major = element_blank(),
         panel.grid.minor = element_blank()) +
-  labs(title = "Relationship Between SDG and Future Z-O Swing%",
-       x = "SDG", y = "Future Z-O Swing%")
+  labs(title = "Relationship Between SDG and Future OPS",
+       x = "SDG", y = "Future OPS")
 
 correlation
 ```
 
 ```{r}
 # Reliability
-correlation <- weightedCorr(x = predict_future$sdg_past, y = predict_future$sdg_future, method = "spearman", weights = predict_future$weights)
+correlation <- weightedCorr(x = predict_future$sdg_scaled_past, y = predict_future$sdg_scaled_future, method = "spearman", weights = predict_future$weights)
 
-ggplot(predict_future, aes(x = sdg_past, y = sdg_future)) +
+ggplot(predict_future %>% filter(pa_past > 200, pa_future > 200), aes(x = sdg_scaled_past, y = sdg_scaled_future)) +
   geom_point(color = "royalblue3", alpha = 0.5) +
   geom_smooth(method = "lm", color = "red", se = FALSE) +
   scale_x_continuous(breaks = pretty_breaks(n = 10)) +
@@ -351,6 +351,86 @@ ggplot(predict_future, aes(x = sdg_past, y = sdg_future)) +
         panel.grid.minor = element_blank()) +
   labs(title = "Relationship Between SDG and Future SDG",
        x = "SDG", y = "Future SDG")
+
+correlation
+```
+
+
+## Z-O Swing%
+
+```{r}
+z_o_swing_2020_2023 <- rbind(sdg_2020, sdg_2021, sdg_2022, sdg_2023) %>% filter(!is.na(z_o_swing_rate), !is.na(ops), !is.na(pa))
+```
+
+
+```{r}
+# Descriptiveness
+correlation <- weightedCorr(x = z_o_swing_2020_2023$z_o_swing_rate, y = z_o_swing_2020_2023$ops, method = "spearman", weights = z_o_swing_2020_2023$pa)
+
+ggplot(z_o_swing_2020_2023 %>% filter(pa > 200), aes(x = z_o_swing_rate, y = ops)) +
+  geom_point(color = "royalblue3", alpha = 0.5) +
+  geom_smooth(method = "lm", color = "red", se = FALSE) +
+  scale_x_continuous(breaks = pretty_breaks(n = 10)) +
+  scale_y_continuous(breaks = pretty_breaks(n = 10)) +
+  theme(plot.title = element_text(face = "bold"),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank()) +
+  labs(title = "Relationship Between Z-O Swing% and OPS",
+       x = "Z-O Swing%", y = "OPS")
+
+correlation
+```
+
+```{r}
+# Restructure data
+predict_21 <- sdg_2021 %>%
+  rename_with(~paste0(., "_future"), -(1:1)) %>% select(-contains("_future"), game_year_future, pa_future, sdg_future, sdg_scaled_future, wrc_plus_future, ops_future, z_o_swing_rate_future) %>%
+  left_join(sdg_2020 %>% rename_with(~paste0(., "_past"), -(1:2)), by = c("batter"))
+
+predict_22 <- sdg_2022 %>%
+  rename_with(~paste0(., "_future"), -(1:1)) %>% select(-contains("_future"), game_year_future, pa_future, sdg_future, sdg_scaled_future, wrc_plus_future, ops_future, z_o_swing_rate_future) %>%
+  left_join(sdg_2021 %>% rename_with(~paste0(., "_past"), -(1:2)), by = c("batter"))
+
+predict_23 <- sdg_2023 %>%
+  rename_with(~paste0(., "_future"), -(1:1)) %>% select(-contains("_future"), game_year_future, pa_future, sdg_future, sdg_scaled_future, wrc_plus_future, ops_future, z_o_swing_rate_future) %>%
+  left_join(sdg_2022 %>% rename_with(~paste0(., "_past"), -(1:2)), by = c("batter"))
+
+predict_future <- rbind(predict_21, predict_22, predict_23)
+predict_future <- predict_future %>% mutate(weights = (pa_past + pa_future) / 2) %>% filter(!is.na(z_o_swing_rate_past), !is.na(z_o_swing_rate_future), !is.na(ops_future), !is.na(weights))
+```
+
+```{r}
+# Predictiveness
+correlation <- weightedCorr(x = predict_future$z_o_swing_rate_past, y = predict_future$ops_future, method = "spearman", weights = predict_future$weights)
+
+ggplot(predict_future %>% filter(pa_past > 200, pa_future > 200), aes(x = z_o_swing_rate_past, y = ops_future)) +
+  geom_point(color = "royalblue3", alpha = 0.5) +
+  geom_smooth(method = "lm", color = "red", se = FALSE) +
+  scale_x_continuous(breaks = pretty_breaks(n = 10)) +
+  scale_y_continuous(breaks = pretty_breaks(n = 10)) +
+  theme(plot.title = element_text(face = "bold"),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank()) +
+  labs(title = "Relationship Between Z-O Swing% and Future OPS",
+       x = "Z-O Swing%", y = "Future OPS")
+
+correlation
+```
+
+```{r}
+# Reliability
+correlation <- weightedCorr(x = predict_future$z_o_swing_rate_past, y = predict_future$z_o_swing_rate_future, method = "spearman", weights = predict_future$weights)
+
+ggplot(predict_future %>% filter(pa_past > 200, pa_future > 200), aes(x = z_o_swing_rate_past, y = z_o_swing_rate_future)) +
+  geom_point(color = "royalblue3", alpha = 0.5) +
+  geom_smooth(method = "lm", color = "red", se = FALSE) +
+  scale_x_continuous(breaks = pretty_breaks(n = 10)) +
+  scale_y_continuous(breaks = pretty_breaks(n = 10)) +
+  theme(plot.title = element_text(face = "bold"),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank()) +
+  labs(title = "Relationship Between Z-O Swing% and Future Z-O Swing%",
+       x = "Z-O Swing%", y = "Future Z-O Swing%")
 
 correlation
 ```
